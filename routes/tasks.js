@@ -2,11 +2,13 @@ const express = require('express');
 const tasks = require('../model/task');
 const router = express.Router();
 const Task = require('../model/task')
+const auth = require('../middleware/auth')
 
 /* GET tasks listing. */
-router.get('/', async (req, res) => {
+router.get('/', auth, async (req, res) => {
+  const userId = req.user.id
   try {
-    const tasks = await Task.find()
+    const tasks = await Task.find({ userId })
     res.json(tasks)
   }
   catch (err) {
@@ -15,16 +17,15 @@ router.get('/', async (req, res) => {
 });
 
 // add
-router.post('/', async (req, res) => {
+router.post('/', auth, async (req, res) => {
   const date = req.body.date ? req.body.date : Date.now()
-
-  console.log(date)
+  const userId = req.user.id
 
   const task = new Task({
     text: req.body.text,
     date: date,
     reminder: req.body.reminder,
-    user: req.body.user,
+    userId,
   })
 
   try {
@@ -36,23 +37,22 @@ router.post('/', async (req, res) => {
 });
 
 // update
-router.patch('/:id', getTask, async (req, res) => {
+router.patch('/:id', auth, getTask, async (req, res) => {
   res.task.reminder = !res.task.reminder
 
   try {
     const updateTask = await res.task.save()
-    res.json({ delSucced: 'The task was deleted' })
+    res.json({ messageOk: 'The task was updated', updateTask })
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
 });
 
 // delete
-router.delete('/:id', getTask, async (req, res) => {
+router.delete('/:id', auth, getTask, async (req, res) => {
   try {
-    console.log(res.task)
     await res.task.remove()
-    res.json({})
+    res.json({ messageOk: 'The task was deleted' })
   } catch (err) {
     res.status(400).json({ message: err.message })
   }
@@ -60,11 +60,15 @@ router.delete('/:id', getTask, async (req, res) => {
 
 async function getTask (req, res, next) {
   let task
-  console.log(req.params)
+  const userId = req.user.id
+
   try {
     task = await Task.findById(req.params.id)
     if (task == null) {
       return res.status(404).json({ message: 'Cannot find task', req: req.params })
+    }
+    if (task.userId != userId) {
+      return res.status(400).json({ message: 'Something wrong', req: req.params })
     }
   } catch (err) {
     return res.status(500).json({ message: err.message })
